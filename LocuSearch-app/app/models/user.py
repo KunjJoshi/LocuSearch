@@ -17,6 +17,7 @@ class User(Base):
     google_scholar_link = Column(String, nullable = True)
     organization = Column(String, nullable = True)
     affiliation = Column(String, nullable = True)
+    name = Column(String)
 
     is_active = Column(Boolean, default = True)
 

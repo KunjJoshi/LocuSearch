@@ -5,6 +5,15 @@ from app.api.routes import auth
 from app.core.config import settings
 from app.db.database import Base, engine
 
+# Add this to your main.py, right after importing your settings
+import os
+print(f"Database URL: {settings.DATABASE_URL}")
+if settings.DATABASE_URL.startswith('sqlite:///'):
+    db_path = settings.DATABASE_URL.replace('sqlite:///', '')
+    abs_path = os.path.abspath(db_path)
+    print(f"Absolute database path: {abs_path}")
+    print(f"File exists: {os.path.exists(abs_path)}")
+
 Base.metadata.create_all(bind = engine)
 
 app = FastAPI(

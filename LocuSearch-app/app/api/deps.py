@@ -24,15 +24,17 @@ def get_current_user(
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms = [settings.ALGORITHM])
         username :str = payload.get("sub")
         if username is None:
-            raise credentials_exception
+            print("username not provided")
         token_data = TokenPayload(sub = username)
-    except JWTError:
+    except JWTError as e:
+        print(e)
         raise credentials_exception
     
     user = db.query(User).filter(User.username == token_data.sub).first()
     if user is None:
+        print("User does not exist")
         raise credentials_exception
     
     if not user.is_active:
         raise HTTPException(status_code = status.HTTP_400_BAD_REQUEST, detail = "Inactive User")
-    return User
+    return user

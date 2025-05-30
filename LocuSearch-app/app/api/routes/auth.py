@@ -29,6 +29,7 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     next_id = 1 if not last_user else last_user.id + 1
     formatted_id = settings.USER_ID_FORMAT.format(next_id)
 
+    print(user_in.password)
     user = User(
         email = user_in.email,
         username = user_in.username,
@@ -50,6 +51,7 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 def login_for_access_token(
     db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
+    print("In login module")
     user = db.query(User).filter(User.username == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -66,7 +68,7 @@ def login_for_access_token(
 
     access_token = create_access_token(subject = form_data.username, expires_delta = access_token_expires)
 
-    return {"access_token": access_token, "token_type":"bearer"}
+    return {"access_token": str(access_token), "token_type":"bearer"}
 
 @router.get("/me", response_model = UserSchema)
 def get_me(current_user: User = Depends(get_current_user)):

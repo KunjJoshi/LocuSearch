@@ -33,7 +33,7 @@ class UserCreate(UserBase):
         
         def spec_chars_in_password(v):
             for word in v:
-                if v in special_characters:
+                if word in special_characters:
                     return True
             return False
         
