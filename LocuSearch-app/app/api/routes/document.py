@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from typing import List
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -21,6 +21,7 @@ from langchain_community.document_loaders.pdf import BasePDFLoader
 import fitz
 import re
 import tempfile
+import json
 
 router = APIRouter()
 embedder = SentenceTransformer("intfloat/e5-base")
@@ -140,8 +141,8 @@ async def upload_file(file: UploadFile, location: str = 'pdfs'):
          Bucket = settings.AWS_BUCKET_NAME,
          Key = s3_key,
          Body = file_content,
-         ContentType = file.content_type,
-         ACL = "public-read"
+         ContentType = file.content_type
+         #ACL = "public-read"
       )
       s3_url = f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
       return s3_url
@@ -179,31 +180,40 @@ async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[
          except Exception as cleanup_error:
             print(f"Warning: Could not delete temporary file: {cleanup_error}")
 
-router.post('/upload', response_model = DocSchema)
-async def upload_document(document_data: DocumentCreate, authors: List[ConnectionCreate], file: UploadFile = File(...),
+@router.post('/upload', response_model = DocSchema)
+async def upload_document(document_data: str =  Form(...), authors: str = Form(...), file: UploadFile = File(...),
                      db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    doc_name = document_data.document_name
+    
+    try:
+       doc_data = DocumentCreate.parse_raw(document_data)
+       #print(doc_data)
+       autho_list = json.loads(authors)
+       authors_data = [ConnectionCreate(**autho) for autho in autho_list]
+    except Exception as e:
+       raise HTTPException(status_code = status.HTTP_406_NOT_ACCEPTABLE, detail = "Not Acceptable JSON")
+    
+    doc_name = doc_data.document_name
     document = db.query(Document).filter(Document.document_name == doc_name).first()
     if document:
-        return HTTPException(status_code = status.HTTP_202_ACCEPTED, detail="Document already exists in Database")
+        raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail="Document already exists in Database")
     
     else:
       try:
         uploader_id = current_user.user_id
         author_list = []
-        for author in authors:
+        for author in authors_data:
             author_list.append(author.authorname)
         doc_link = await chunk_and_upload(file, doc_name, author_list)
         doc = Document(
             document_name = doc_name,
             document_link = doc_link,
             uploaded_by = uploader_id,
-            subject = document_data.subject
+            subject = doc_data.subject
         )
         db.add(doc)
         db.flush()
 
-        for author in authors:
+        for author in authors_data:
             connection = AuthorConnection(
                 authorname = author.authorname,
                 authoremail = "" if not author.authoremail else author.authoremail,

@@ -29,7 +29,6 @@ class Document(DocumentInDB):
 class ConnectionBase(BaseModel):
     authorname : str
     authoremail: Optional[str]
-    document_conn: int
     primary_author: Optional[bool]
 
 class ConnectionCreate(ConnectionBase):

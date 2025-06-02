@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth
+from app.api.routes import auth, document
+
+print(f"Length of Document APIs: {len(document.router.routes)}")
 from app.core.config import settings
 from app.db.database import Base, engine
 
@@ -30,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix = f"{settings.PROJECT_URL_V1}/auth", tags = ["authentication"])
+app.include_router(document.router, prefix = f"{settings.PROJECT_URL_V1}/document", tags = ["document"])
 
 @app.get("/")
 def root():

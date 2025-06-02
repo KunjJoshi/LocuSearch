@@ -15,6 +15,8 @@ class Document(Base):
     upload_date = Column(DateTime, default = datetime.utcnow)
     subject = Column(String, index = True, nullable =True)
 
+    authors = relationship("AuthorConnection", back_populates="document", cascade="all, delete-orphan")
+
 class AuthorConnection(Base):
     __tablename__ = "authors"
 
