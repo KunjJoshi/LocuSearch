@@ -22,7 +22,9 @@ class DocumentInDB(DocumentBase):
 
     class Config:
         from_attributes = True
-    
+
+class DocumentDelete(BaseModel):
+    document_id: int    
 class Document(DocumentInDB):
     pass
 

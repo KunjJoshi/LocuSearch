@@ -9,7 +9,7 @@ from app.core.config import settings
 import boto3
 from app.db.database import get_db
 from app.models.document import Document, AuthorConnection
-from app.schemas.document import DocumentCreate, Document as DocSchema, DocumentUpdate, ConnectionCreate, AuthorConnection as ConnSchema, ConnectionUpdate
+from app.schemas.document import DocumentCreate, Document as DocSchema, DocumentUpdate, ConnectionCreate, AuthorConnection as ConnSchema, ConnectionUpdate, DocumentDelete
 from app.schemas.user import User as UserSchema
 from app.models.user import User
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -76,13 +76,42 @@ class WeaviateDB:
         query_vector = embedder.encode(query)
         results = self.client.query.get("Document", ["text", "source", "page", "title", "authors"]).with_near_vector({"vector":query_vector}).with_additional(["certainty"]).with_limit(20).do()
         return results['data']['Get']['Document']
+    
+    def delete(self, title:str):
+       try:
+          results = self.client.batch.delete_objects(
+             class_name = "Document",
+             where = {
+                "path": ['title'],
+                "operator":"Equal",
+                "valueText":title
+             }
+          )
+
+          print(results)
+          if results and "results" in results:
+             if results['results']['failed'] == 0 and results['results']['successful'] != 0:
+               return {
+                  "success":True,
+                  "message":f"Deleted {results['results']['successful']} items from the Vector Store",
+               }
+          else:
+             return {
+                "success":False,
+                "message":"Could not find any items in Vector Store"
+             }
+       except Exception as e:
+          return {
+             "success":False,
+             "message":f"{e}: Error encountered in deleting from Vector Store"
+          }
 
 
 class PDFLoader(BasePDFLoader):
     def __init__(self, embedder: SentenceTransformer = embedder) -> None:
         self.embedder = embedder
     
-    def load(self, file_name, document_name, authors_list):
+    def load(self, file_name, document_name, authors_list, file_link):
         doc = fitz.open(file_name)
         documents = []
         for pageNum, page in enumerate(doc):
@@ -109,7 +138,7 @@ class PDFLoader(BasePDFLoader):
                     "authors": authors_list,
                     "metadata" : {
                         "page": str(pageNum + 1),
-                        "source": file_name,
+                        "source": file_link,
                     }
                 })
         return documents
@@ -167,7 +196,7 @@ async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[
       temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
       with open(temp_file_path, "wb") as temp_file:
         temp_file.write(file_content)
-      documents = loader.load(temp_file_path, file_name, authors_list)
+      documents = loader.load(temp_file_path, file_name, authors_list, s3_url)
       weaviate_client.upload_file(documents)
       return s3_url
    except Exception as e:
@@ -229,3 +258,33 @@ async def upload_document(document_data: str =  Form(...), authors: str = Form(.
          db.rollback()
          print(e)
          raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Error occured in uploading document!")
+
+@router.get('/all-papers')
+def get_all_papers(db: Session = Depends(get_db)):
+   try:
+      all_papers = db.query(Document).all()
+      return all_papers
+   except Exception as e:
+      raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Error in fetching papers!")
+
+@router.delete('/delete')
+def delete_document(document: DocumentDelete,db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+   try:
+      doc = db.query(Document).filter(Document.document_id == document.document_id).first()
+      if doc:
+         doc_uploader = doc.uploaded_by
+         if current_user.user_id == doc_uploader:
+            title = doc.document_name
+            message = weaviate_client.delete(title)
+            db.delete(doc)
+            db.commit()
+            if message["success"]:
+               return {"success":True, "message":f"{message['message']}"}
+            else:
+               return {"success":True, "message":"Failure in deleting from Vectorstore"}
+         else:
+            raise HTTPException(status_code = status.HTTP_401_UNAUTHORIZED, detail = "Ask the uploader to delete the Document!")
+      else:
+         raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = "Document not found")
+   except Exception as e:
+      raise HTTPException(status_code = status.HTTP_500_INTERNAL_SERVER_ERROR, detail = f"{e}, Error in deleting paper!")
