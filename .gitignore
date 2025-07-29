@@ -1,3 +1,4 @@
 .vscode/
 locenv/
 .DS_Store
+LocuSearch-app/.env
