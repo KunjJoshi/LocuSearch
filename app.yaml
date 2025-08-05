@@ -1,0 +1,12 @@
+runtime: python311
+
+# This is for App Engine deployment (alternative to Cloud Run)
+entrypoint: gunicorn -b :$PORT main:app
+
+env_variables:
+  # Add your environment variables here
+  ENVIRONMENT: "production"
+
+automatic_scaling:
+  min_instances: 0
+  max_instances: 10
