@@ -1,3 +1,4 @@
+from torch._C import NoneType
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 import torch
 from dotenv import load_dotenv
@@ -8,15 +9,15 @@ import json
 
 
 load_dotenv()
-MODEL_CHECKPOINT = "google/flan-t5-base"
+#MODEL_CHECKPOINT = "google/flan-t5-base"
 
 environment = os.getenv("ENVIRONMENT", "test")
 if environment == "test":
     api_key = None
 else:
     api_key = os.getenv("CHATGPT_KEY")
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_CHECKPOINT, torch_dtype = "auto", device_map = "auto")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_CHECKPOINT, trust_remote_code = True)
+#model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_CHECKPOINT, torch_dtype = "auto", device_map = "auto")
+#tokenizer = AutoTokenizer.from_pretrained(MODEL_CHECKPOINT, trust_remote_code = True)
 
 
 class TitleCreator(object):
@@ -36,18 +37,20 @@ class TitleCreator(object):
         if api_key is not None:
             self.llm = ChatOpenAI(api_key = api_key, model = "gpt-3.5-turbo", temperature = 0)
         if environment == "test":
+            if self.model is None and self.tokenizer is None:
+                raise ValueError("Model and tokenizer must be provided")
             try:
                 self.generate_query(query)
-                inputs = tokenizer(self.messages, return_tensors = "pt", padding = 'max_length', truncation = False)
+                inputs = self.tokenizer(self.messages, return_tensors = "pt", padding = 'max_length', truncation = False)
                 device = torch.device("mps")
                 inputs = {k:v.to(device) for k,v in inputs.items()}
-                output = model.generate(input_ids = inputs['input_ids']
+                output = self.model.generate(input_ids = inputs['input_ids']
                                 , attention_mask = inputs['attention_mask'],
                                 num_beams = 1,
                                 top_p = 0.95,
                                 max_new_tokens = 15,
                                 do_sample = True)
-                response = tokenizer.decode(output[0], skip_special_tokens=True)
+                response = self.tokenizer.decode(output[0], skip_special_tokens=True)
                 self.generate_query("")
                 return {"error":False, "title":response}
             except Exception as e:
@@ -86,6 +89,8 @@ class AnswerFetcher(object):
             if not results:
                 return {"error":True, "message":"Error in fetching data from VectorDB"}
             if environment == "test":
+                if self.model is None and self.tokenizer is None:
+                    raise ValueError("Model and tokenizer must be provided")
                 context = "Answer the following question based on the data provided to you: \n"
                 context = context + "Question: \n"
                 context = context + query.replace("query: ", "")
@@ -145,6 +150,8 @@ class AnswerFetcher(object):
                 return {"error":True, "message":"Error in fetching data from VectorDB"}
             
             if environment == "test":
+                if self.model is None and self.tokenizer is None:
+                    raise ValueError("Model and tokenizer must be provided")
                 context = "You must answer the asked Query based on Chat History and Provided Context to you. I will first provide with the Chat History, the the Context and finally the Query. Use the provided data to answer the finally asked Query"
                 context = context + "\n" + "Chat History:\n" + history            
                 cont_num = 0
@@ -190,7 +197,7 @@ class AnswerFetcher(object):
         except Exception as e:
             return {"error":True, "message":str(e)}
 
-TITLE_GENERATOR = TitleCreator(model, tokenizer)
-ANSWER_CREATOR = AnswerFetcher(model, tokenizer, weaviate_client)
+TITLE_GENERATOR = TitleCreator(None, None)
+ANSWER_CREATOR = AnswerFetcher(None, None, weaviate_client)
     
     
