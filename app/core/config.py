@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     PROJECT_URL_V1: str = "/api/v1"
 
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////Users/kunjjoshi/Downloads/PROJECTS/LocuSearch/LocuSearch-app/loc.sqlite3")
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
     ALGORITHM: str = "HS256"

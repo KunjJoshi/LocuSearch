@@ -133,8 +133,7 @@ def open_chat(query_id: int, db: Session = Depends(get_db), current_user: User =
         if query_item.user_id != user_id:
             raise HTTPException(status_code = status.HTTP_401_UNAUTHORIZED, detail = "You are not authorized to open this chat")
         else:
-            chat_id = query_item.chat_id
-            chat_item = db.query(Chat).filter(Chat.chat_id == chat_id).first()
+            chat_item = db.query(Chat).filter(Chat.parent_query_id == query_id).first()
             message_history = []
             messages = db.query(ChatMessage).filter(ChatMessage.parent_chat_id == chat_item.chat_id).order_by(ChatMessage.sent.asc())
             for message in messages:
@@ -144,7 +143,7 @@ def open_chat(query_id: int, db: Session = Depends(get_db), current_user: User =
                         "content": message.content
                     }
                 )
-            response = {"error":False, "message_history":message_history, "chat_id":chat_id}
+            response = {"error":False, "message_history":message_history, "chat_id":query_id}
             return response
     except Exception as e:
         raise HTTPException(status_code = status.HTTP_500_INTERNAL_SERVER_ERROR, detail = f"Error in opening chat: {e}")
@@ -179,8 +178,9 @@ def ask(message: SendMessage, db: Session = Depends(get_db), current_user: User 
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to decrypt API key")
         
         chat_item = db.query(Chat).filter(Chat.chat_id == chat_id).first()
+        parent_query_id = chat_item.parent_query_id
         user_id = current_user.user_id
-        query_item = db.query(QuerySearch).filter(QuerySearch.chat_id == chat_id).first()
+        query_item = db.query(QuerySearch).filter(QuerySearch.query_id == parent_query_id).first()
         print("User ID:" + str(user_id))
         print("Query Owner: " + str(query_item.user_id))
         if query_item.user_id != user_id:
