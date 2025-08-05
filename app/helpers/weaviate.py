@@ -1,7 +1,7 @@
 import weaviate
 from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders.pdf import BasePDFLoader
-import fitz
+import pymupdf as fitz
 import re
 import os
 
