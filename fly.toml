@@ -1,0 +1,128 @@
+# fly.toml app configuration file
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = "locusearch"  # Replace with your actual app name
+primary_region = "sjc"    # Choose your primary region (iad, lhr, sin, etc.)
+
+# Kill signal and shutdown timeout
+kill_signal = "SIGINT"
+kill_timeout = 5
+swap_size_mb = 512        # Add swap for memory-intensive operations
+
+[build]
+  # Fly.io will automatically detect and use your Dockerfile
+
+[deploy]
+  # Release command - useful for running migrations or other pre-deploy tasks
+  # release_command = "python migrate.py"  # Uncomment if needed
+
+[env]
+  # Non-sensitive environment variables only
+  # These are visible in the dashboard and logs
+  PORT = "8080"
+  ENVIRONMENT = "production"
+  PYTHON_UNBUFFERED = "1"
+  PYTHONDONTWRITEBYTECODE = "1"
+  # DO NOT put sensitive data here - use Secrets instead
+
+[experimental]
+  # Enable new features
+  auto_rollback = true
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 25
+    soft_limit = 20
+
+[[services]]
+  # HTTP service configuration
+  http_checks = []
+  internal_port = 8080
+  processes = ["app"]
+  protocol = "tcp"
+  script_checks = []
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+    type = "connections"
+
+  [[services.ports]]
+    force_https = true
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.tcp_checks]]
+    grace_period = "1s"
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"
+
+  [[services.http_checks]]
+    interval = "10s"
+    grace_period = "5s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    restart_limit = 0
+    timeout = "2s"
+    tls_skip_verify = false
+    [services.http_checks.headers]
+
+# Machine configuration
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256  # Start small, scale up as needed
+
+# Health checks
+[checks]
+  [checks.health]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/health"
+    port = 8080
+    protocol = "http"
+    restart_limit = 0
+    timeout = "5s"
+    type = "http"
+    [checks.health.headers]
+      Accept = "application/json"
+
+# Metrics (optional - for Fly.io dashboard)
+[metrics]
+  port = 8080
+  path = "/metrics"  # If you implement Prometheus metrics
+
+# Process groups (if you need multiple processes)
+[processes]
+  app = ""  # Default process
+
+# Mounts (for persistent storage if needed)
+# [[mounts]]
+#   source = "data"
+#   destination = "/data"
+#   processes = ["app"]
+
+# Statics (if serving static files)
+# [[statics]]
+#   guest_path = "/app/static"
+#   url_prefix = "/static/"
+
+# Restart policy
+[restart]
+  policy = "always"
+  retries = 1
