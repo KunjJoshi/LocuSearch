@@ -30,34 +30,6 @@ try:
 except Exception as e:
    pass
 
-s3 = boto3.client(
-   "s3",
-   region_name = settings.AWS_REGION,
-   aws_access_key_id = settings.AWS_ACCESS_KEY,
-   aws_secret_access_key = settings.AWS_SECRET_KEY
-)
-
-async def upload_file(file: UploadFile, location: str = 'pdfs'):
-   try:
-      file_extension = Path(file.filename).suffix
-      unique_filename = f"{uuid.uuid4()}{file_extension}"
-      s3_key = f"{location.strip('/')}/{unique_filename}"
-      file_content = await file.read()
-      await file.seek(0)
-      s3.put_object(
-         Bucket = settings.AWS_BUCKET_NAME,
-         Key = s3_key,
-         Body = file_content,
-         ContentType = file.content_type
-         #ACL = "public-read"
-      )
-      s3_url = f"https://{settings.AWS_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
-      return s3_url
-   except ClientError as e:
-      raise Exception(f"Failed to upload to s3 : {e}")
-   except Exception as e:
-      raise Exception(f"Error in uploading: {e}")
-
 async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[str], file_link: str):
    temp_file_path = None
    try:
@@ -67,8 +39,6 @@ async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[
       file_content = await file.read()
       if len(file_content) > 5 * 1024 * 1024:
          raise Exception("Too large of a file. (Max Upload: 5MB)")
-      #await file.seek(0)
-      #s3_url = await upload_file(file)
       file_extension = Path(file.filename).suffix
       temp_filename = f"{uuid.uuid4()}{file_extension}"
       temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
@@ -177,31 +147,25 @@ def document_details(doc_id: int, db: Session = Depends(get_db), current_user: U
    try:
       user_id = current_user.user_id
       document = db.query(Document).filter(Document.document_id == doc_id).first()
-      if not document:
+      if document:
+         authors = db.query(AuthorConnection).filter(AuthorConnection.document_conn == doc_id).all()
+         author_list = []
+         for author in authors:
+            author_list.append({
+               "authorname": author.authorname,
+               "authoremail": author.authoremail,
+               "primary_author": author.primary_author
+            })
+         return {
+            "doc_id": document.document_id,
+            "doc_name": document.document_name,
+            "doc_link": document.document_link,
+            "subject": document.subject,
+            "uploaded_by": document.uploaded_by,
+            "authors": author_list,
+            "doc_owner": user_id == document.uploaded_by
+         }
+      else:
          raise HTTPException(status_code = status.HTTP_404_NOT_FOUND, detail = "Document not found")
-      
-      authors = db.query(AuthorConnection).filter(AuthorConnection.document_conn == doc_id).all()
-      author_list = []
-      for author in authors:
-         author_list.append({
-            "author_name":author.authorname,
-            "author_email":author.authoremail,
-            "primary_author":author.primary_author
-         })
-      
-      uploaded_by = db.query(User).filter(User.user_id == document.uploaded_by).first()
-      uploader = uploaded_by.name
-      response = {
-         "error":False,
-         "doc_id":document.document_id,
-         "doc_name":document.document_name,
-         "doc_link":document.document_link,
-         "subject":document.subject,
-         "uploaded_by": uploader,
-         "authors":author_list,
-         "doc_owner": user_id == document.uploaded_by
-      }
-      return response
    except Exception as e:
-      print(e)
       raise HTTPException(status_code = status.HTTP_500_INTERNAL_SERVER_ERROR, detail = "Error in fetching document details!")
