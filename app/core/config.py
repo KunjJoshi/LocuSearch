@@ -15,7 +15,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
-    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+    # Use a consistent secret key if not provided in environment
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "locusearch-secret-key-2024")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
@@ -29,5 +30,10 @@ class Settings(BaseSettings):
     WEAVIATE_URL: str = "http://localhost:8080"
 
 settings = Settings()
+
+# Log configuration for debugging
+print(f"SECRET_KEY configured: {'Yes' if settings.SECRET_KEY else 'No'}")
+print(f"ALGORITHM: {settings.ALGORITHM}")
+print(f"TOKEN_EXPIRE_MINUTES: {settings.ACCESS_TOKEN_EXPIRE_MINUTES}")
 
 

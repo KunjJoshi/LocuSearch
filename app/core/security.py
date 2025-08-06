@@ -15,7 +15,7 @@ def create_access_token(subject: Union[str, any], expires_delta: timedelta = Non
             minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
     
-    to_encode = {"expire": expire.timestamp(), "sub": str(subject)}
+    to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, settings.ALGORITHM)
     return encoded_jwt
 

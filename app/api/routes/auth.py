@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+import logging
+from jose import jwt, JWTError
 
 from app.api.deps import get_current_user
 from app.core.config import settings
@@ -17,9 +19,32 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
+# Set up logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+
+@router.get("/validate-token")
+def validate_token(token: str):
+    """Validate a JWT token without database access"""
+    try:
+        logger.info(f"Validating token: {token[:20]}...")
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        logger.info(f"Token is valid. Payload: {payload}")
+        return {
+            "valid": True,
+            "username": payload.get("sub"),
+            "expires": payload.get("exp")
+        }
+    except JWTError as e:
+        logger.error(f"Token validation failed: {e}")
+        return {
+            "valid": False,
+            "error": str(e)
+        }
+
 @router.post("/register", response_model = UserSchema)
 def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == user_in.username).first()
@@ -63,10 +88,11 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 def login_for_access_token(
     db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
 ):
-    print("In login module")
+    logger.info(f"Login attempt for username: {form_data.username}")
     user = db.query(User).filter(User.username == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Failed login attempt for username: {form_data.username}")
         raise HTTPException(
             status_code= status.HTTP_401_UNAUTHORIZED,
             detail = "Incorrect Username or password",
@@ -74,17 +100,31 @@ def login_for_access_token(
         )
     
     if not user.is_active:
+        logger.warning(f"Inactive user login attempt: {form_data.username}")
         raise HTTPException(status_code = status.HTTP_400_BAD_REQUEST, detail = "Inactive User")
     
     access_token_expires = timedelta(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-
     access_token = create_access_token(subject = form_data.username, expires_delta = access_token_expires)
+    
+    logger.info(f"Successful login for user: {form_data.username}")
+    logger.info(f"Token created with expiration: {access_token_expires}")
 
     return {"access_token": str(access_token), "token_type":"bearer"}
 
 @router.get("/me", response_model = UserSchema)
 def get_me(current_user: User = Depends(get_current_user)):
+    logger.info(f"Profile requested for user: {current_user.username}")
     return current_user
+
+@router.get("/test-auth")
+def test_auth(current_user: User = Depends(get_current_user)):
+    """Simple endpoint to test if authentication is working"""
+    logger.info(f"Auth test successful for user: {current_user.username}")
+    return {
+        "message": "Authentication successful",
+        "username": current_user.username,
+        "user_id": current_user.user_id
+    }
 
 @router.put("/update-user", response_model = UserSchema)
 def update_user(update_deets: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
