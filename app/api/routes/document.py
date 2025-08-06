@@ -193,7 +193,7 @@ def document_details(doc_id: int, db: Session = Depends(get_db), current_user: U
       uploader = uploaded_by.name
       response = {
          "error":False,
-         "doc_id":doc_id,
+         "doc_id":document.document_id,
          "doc_name":document.document_name,
          "doc_link":document.document_link,
          "subject":document.subject,
