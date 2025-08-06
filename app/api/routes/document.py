@@ -33,19 +33,41 @@ except Exception as e:
 async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[str], file_link: str):
    temp_file_path = None
    try:
+      import time
+      start_time = time.time()
+      
       allowed_type = set(["application/pdf"])
       if file.content_type not in allowed_type:
          raise Exception(f"Unsupoported File Type")
       file_content = await file.read()
       if len(file_content) > 5 * 1024 * 1024:
          raise Exception("Too large of a file. (Max Upload: 5MB)")
+      
+      print(f"Processing file: {file_name}, size: {len(file_content)} bytes")
+      
       file_extension = Path(file.filename).suffix
       temp_filename = f"{uuid.uuid4()}{file_extension}"
       temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
       with open(temp_file_path, "wb") as temp_file:
         temp_file.write(file_content)
+      
+      print(f"Temporary file created: {temp_file_path}")
+      
+      # Load and chunk the document
+      chunk_start = time.time()
       documents = loader.load(temp_file_path, file_name, authors_list, file_link)
+      chunk_time = time.time() - chunk_start
+      print(f"Document chunking completed in {chunk_time:.2f}s, {len(documents)} chunks created")
+      
+      # Upload to Weaviate
+      weaviate_start = time.time()
       weaviate_client.upload_file(documents)
+      weaviate_time = time.time() - weaviate_start
+      print(f"Weaviate upload completed in {weaviate_time:.2f}s")
+      
+      total_time = time.time() - start_time
+      print(f"Total processing time: {total_time:.2f}s")
+      
    except Exception as e:
       raise Exception(f"Error in Chunking and Uploading file: {e}")
    finally:

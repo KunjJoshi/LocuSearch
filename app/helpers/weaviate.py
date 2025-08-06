@@ -28,19 +28,60 @@ class WeaviateDB:
             )
     
     def upload_file(self, chunks):
-        for chunk in chunks:
-            embedding = embedder.encode(chunk["text"])
-            self.client.data_object.create(
-                {
-                    "text" : chunk["text"],
+        try:
+            # Prepare batch data for efficient upload
+            batch_data = []
+            
+            for chunk in chunks:
+                embedding = embedder.encode(chunk["text"])
+                batch_data.append({
+                    "text": chunk["text"],
                     "source": chunk["metadata"]["source"],
                     "page": chunk["metadata"]["page"],
                     "title": chunk["paper-name"],
-                    "authors": chunk["authors"]
-                },
-                class_name = "Document",
-                vector = embedding
-            )
+                    "authors": chunk["authors"],
+                    "vector": embedding
+                })
+            
+            # Use batch upload for better performance
+            if batch_data:
+                with self.client.batch as batch:
+                    for data in batch_data:
+                        batch.add_data_object(
+                            data_object={
+                                "text": data["text"],
+                                "source": data["source"],
+                                "page": data["page"],
+                                "title": data["title"],
+                                "authors": data["authors"]
+                            },
+                            class_name="Document",
+                            vector=data["vector"]
+                        )
+                
+                print(f"Successfully uploaded {len(batch_data)} chunks to Weaviate")
+            else:
+                print("No chunks to upload")
+                
+        except Exception as e:
+            print(f"Error in batch upload to Weaviate: {e}")
+            # Fallback to individual uploads if batch fails
+            for chunk in chunks:
+                try:
+                    embedding = embedder.encode(chunk["text"])
+                    self.client.data_object.create(
+                        {
+                            "text": chunk["text"],
+                            "source": chunk["metadata"]["source"],
+                            "page": chunk["metadata"]["page"],
+                            "title": chunk["paper-name"],
+                            "authors": chunk["authors"]
+                        },
+                        class_name="Document",
+                        vector=embedding
+                    )
+                except Exception as chunk_error:
+                    print(f"Error uploading individual chunk: {chunk_error}")
     
     def upload_folder(self, doc_directory, loader, metadata):
         all_files = os.listdir(doc_directory)
