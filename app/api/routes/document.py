@@ -148,12 +148,16 @@ def document_details(doc_id: int, db: Session = Depends(get_db), current_user: U
       user_id = current_user.user_id
       document = db.query(Document).filter(Document.document_id == doc_id).first()
       if document:
+         # Get the uploader's user information
+         uploader = db.query(User).filter(User.user_id == document.uploaded_by).first()
+         uploader_name = uploader.name if uploader else "Unknown User"
+         
          authors = db.query(AuthorConnection).filter(AuthorConnection.document_conn == doc_id).all()
          author_list = []
          for author in authors:
             author_list.append({
-               "authorname": author.authorname,
-               "authoremail": author.authoremail,
+               "author_name": author.authorname,
+               "author_email": author.authoremail,
                "primary_author": author.primary_author
             })
          return {
@@ -161,7 +165,7 @@ def document_details(doc_id: int, db: Session = Depends(get_db), current_user: U
             "doc_name": document.document_name,
             "doc_link": document.document_link,
             "subject": document.subject,
-            "uploaded_by": document.uploaded_by,
+            "uploaded_by": uploader_name,
             "authors": author_list,
             "doc_owner": user_id == document.uploaded_by
          }
