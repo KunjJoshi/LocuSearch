@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from typing import List
+from fastapi import BackgroundTasks
+import asyncio
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pathlib import Path
@@ -30,30 +32,14 @@ try:
 except Exception as e:
    pass
 
-async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[str], file_link: str):
-   temp_file_path = None
+def chunk_and_upload(temp_file_path: str,file_name: str, authors_list: List[str], file_link: str, doc_id: int):
+   db = next(get_db())
    try:
+      if not os.path.exists(temp_file_path):
+         raise Exception(f"Temporary file not found: {temp_file_path}")
+      
       import time
-      start_time = time.time()
-      
-      allowed_type = set(["application/pdf"])
-      if file.content_type not in allowed_type:
-         raise Exception(f"Unsupoported File Type")
-      file_content = await file.read()
-      if len(file_content) > 5 * 1024 * 1024:
-         raise Exception("Too large of a file. (Max Upload: 5MB)")
-      
-      print(f"Processing file: {file_name}, size: {len(file_content)} bytes")
-      
-      file_extension = Path(file.filename).suffix
-      temp_filename = f"{uuid.uuid4()}{file_extension}"
-      temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
-      with open(temp_file_path, "wb") as temp_file:
-        temp_file.write(file_content)
-      
-      print(f"Temporary file created: {temp_file_path}")
-      
-      # Load and chunk the document
+      start_time = time.time()      
       chunk_start = time.time()
       documents = loader.load(temp_file_path, file_name, authors_list, file_link)
       chunk_time = time.time() - chunk_start
@@ -65,12 +51,20 @@ async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[
       weaviate_time = time.time() - weaviate_start
       print(f"Weaviate upload completed in {weaviate_time:.2f}s")
       
+      doc = db.query(Document).filter(Document.document_id == doc_id).first()
+      if doc:
+         db.commit()
       total_time = time.time() - start_time
       print(f"Total processing time: {total_time:.2f}s")
       
    except Exception as e:
+      doc = db.query(Document).filter(Document.document_id == doc_id).first()
+      if doc:
+         db.delete(doc)
+      db.commit()
       raise Exception(f"Error in Chunking and Uploading file: {e}")
    finally:
+       db.close()
        if temp_file_path and os.path.exists(temp_file_path):
          try:
             os.remove(temp_file_path)
@@ -79,7 +73,7 @@ async def chunk_and_upload(file: UploadFile, file_name: str, authors_list: List[
             print(f"Warning: Could not delete temporary file: {cleanup_error}")
 
 @router.post('/upload', response_model = DocSchema)
-async def upload_document(document_data: str =  Form(...), authors: str = Form(...), file: UploadFile = File(...),
+async def upload_document(background_tasks: BackgroundTasks, document_data: str =  Form(...), authors: str = Form(...), file: UploadFile = File(...),
                      db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     
     try:
@@ -90,10 +84,21 @@ async def upload_document(document_data: str =  Form(...), authors: str = Form(.
     except Exception as e:
        raise HTTPException(status_code = status.HTTP_406_NOT_ACCEPTABLE, detail = "Not Acceptable JSON")
     
+    try:
+      allowed_type = set(["application/pdf"])
+      if file.content_type not in allowed_type:
+         raise Exception(f"Unsupoported File Type")
+      file_content = await file.read()
+      if len(file_content) > 5 * 1024 * 1024:
+         raise Exception("Too large of a file. (Max Upload: 5MB)")
+    except Exception as e:
+      raise HTTPException(status_code = status.HTTP_406_NOT_ACCEPTABLE, detail = "Not Acceptable PDF file format")
+   
     doc_name = doc_data.document_name
     document = db.query(Document).filter(Document.document_name == doc_name).first()
     if document:
         raise HTTPException(status_code = status.HTTP_409_CONFLICT, detail="Document already exists in Database")
+    
     
     else:
       try:
@@ -101,7 +106,12 @@ async def upload_document(document_data: str =  Form(...), authors: str = Form(.
         author_list = []
         for author in authors_data:
             author_list.append(author.authorname)
-        await chunk_and_upload(file, doc_name, author_list, doc_data.document_link)
+        temp_filename = f"{uuid.uuid4()}.pdf"
+        temp_path = os.path.join(tempfile.gettempdir(), temp_filename)
+        with open(temp_path, "wb") as f:
+            f.write(file_content)
+         
+        #await chunk_and_upload(file, doc_name, author_list, doc_data.document_link)
         doc = Document(
             document_name = doc_name,
             document_link = doc_data.document_link,
@@ -122,6 +132,9 @@ async def upload_document(document_data: str =  Form(...), authors: str = Form(.
         
         db.commit()
         db.refresh(doc)
+
+        author_list = [author.authorname for author in authors_data]
+        background_tasks.add_task(chunk_and_upload, temp_path, doc_name, author_list, doc_data.document_link, doc.document_id)
         return doc
       except Exception as e:
          db.rollback()
