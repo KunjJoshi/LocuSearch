@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-2"
     AWS_BUCKET_NAME: str = "locubucket"
 
-    WEAVIATE_URL: str = "http://localhost:8080"
+    WEAVIATE_URL: str = os.getenv("WEAVIATE_URL")
 
 settings = Settings()
 

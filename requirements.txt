@@ -185,7 +185,7 @@ urllib3
 uvicorn
 validators
 wcwidth
-weaviate-client
+weaviate-client>=3.26.7,<4.0.0
 webencodings
 wrapt
 yarl
