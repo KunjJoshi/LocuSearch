@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-2"
     AWS_BUCKET_NAME: str = "locubucket"
 
-    WEAVIATE_URL: str = os.getenv("WEAVIATE_URL")
+    WEAVIATE_URL: str = os.getenv("WEAVIATE_URL", "https://weaviate-production-91e5.up.railway.app")
 
 settings = Settings()
 
