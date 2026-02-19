@@ -16,7 +16,7 @@ if settings.DATABASE_URL.startswith('sqlite:///'):
     print(f"Absolute database path: {abs_path}")
     print(f"File exists: {os.path.exists(abs_path)}")
 
-Base.metadata.create_all(bind = engine)
+#Base.metadata.create_all(bind = engine)
 
 app = FastAPI(
     title = settings.PROJECT_NAME,
